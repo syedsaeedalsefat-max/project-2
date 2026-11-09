@@ -44,11 +44,21 @@ class Student:
         """
         self.student_id = str(student_id).strip().upper()
         self.name = str(name).strip()
+        if not self.student_id:
+            raise ValueError("Student ID cannot be empty.")
+        if not self.name:
+            raise ValueError("Student name cannot be empty.")
         self.marks: Dict[str, float] = {}
 
         # Validate and store marks for the defined subjects
         for subject in self.SUBJECTS:
-            val = float(marks.get(subject, 0.0))
+            raw_val = marks.get(subject, 0.0)
+            try:
+                val = float(raw_val)
+            except (ValueError, TypeError):
+                raise ValueError(
+                    f"Marks for {subject} must be a valid number. Got: {raw_val}"
+                )
             if val < 0.0 or val > self.MAX_MARKS_PER_SUBJECT:
                 raise ValueError(
                     f"Marks for {subject} must be between 0 and {self.MAX_MARKS_PER_SUBJECT}. Got: {val}"
@@ -159,8 +169,14 @@ class Student:
         name = str(data.get("Name", "")).strip()
         marks = {}
         for subject in cls.SUBJECTS:
-            val = data.get(subject, 0.0)
-            marks[subject] = float(val) if val != "" else 0.0
+            val = data.get(subject)
+            if val is None or str(val).strip() == "":
+                marks[subject] = 0.0
+            else:
+                try:
+                    marks[subject] = float(val)
+                except (ValueError, TypeError):
+                    marks[subject] = 0.0
         return cls(student_id=student_id, name=name, marks=marks)
 
     def generate_report_card(self) -> str:

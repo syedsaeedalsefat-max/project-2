@@ -93,13 +93,14 @@ def pause(message: str = "Press Enter to return to menu...") -> None:
     """Prompt the user to press Enter to continue."""
     try:
         input(f"\n{Colors.GRAY}{message}{Colors.RESET}")
-    except (EOFError, KeyboardInterrupt):
+    except KeyboardInterrupt:
         print()
 
 
 def prompt_string(prompt_text: str, allow_empty: bool = False) -> str:
     """
     Prompt the user for string input with empty checks.
+    Returns empty string if cancelled by KeyboardInterrupt.
     """
     while True:
         try:
@@ -108,14 +109,15 @@ def prompt_string(prompt_text: str, allow_empty: bool = False) -> str:
                 print_error("Input cannot be empty. Please try again.")
                 continue
             return value
-        except (KeyboardInterrupt, EOFError):
+        except KeyboardInterrupt:
             print("\nOperation cancelled.")
             return ""
 
 
-def prompt_float(prompt_text: str, min_val: float = 0.0, max_val: float = 100.0) -> float:
+def prompt_float(prompt_text: str, min_val: float = 0.0, max_val: float = 100.0) -> Optional[float]:
     """
     Prompt user for a floating-point number within [min_val, max_val] with retries.
+    Returns None if operation was cancelled via KeyboardInterrupt.
     """
     while True:
         try:
@@ -127,9 +129,9 @@ def prompt_float(prompt_text: str, min_val: float = 0.0, max_val: float = 100.0)
             return val
         except ValueError:
             print_error("Invalid number! Please enter a valid decimal or integer value.")
-        except (KeyboardInterrupt, EOFError):
+        except KeyboardInterrupt:
             print("\nOperation cancelled.")
-            return min_val
+            return None
 
 
 def render_student_table(students: List[Student]) -> None:

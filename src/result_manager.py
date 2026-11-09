@@ -84,7 +84,7 @@ class ResultManager:
 
     def update_student_marks(self, student_id: str, new_marks: Dict[str, float]) -> bool:
         """
-        Update marks for an existing student and recalculate their metrics.
+        Update marks for an existing student and recalculate their metrics atomically.
 
         Args:
             student_id: The ID of student to update.
@@ -96,12 +96,24 @@ class ResultManager:
         student = self.search_student(student_id)
         if not student:
             return False
+
+        # Phase 1: Validate all marks before mutating state (atomic update)
+        validated: Dict[str, float] = {}
         for subj, score in new_marks.items():
             if subj in student.SUBJECTS:
-                if 0.0 <= score <= student.MAX_MARKS_PER_SUBJECT:
-                    student.marks[subj] = round(float(score), 2)
-                else:
-                    raise ValueError(f"Marks must be between 0 and {student.MAX_MARKS_PER_SUBJECT}.")
+                try:
+                    val = float(score)
+                except (ValueError, TypeError):
+                    raise ValueError(f"Invalid numeric mark for {subj}: {score}")
+                if not (0.0 <= val <= student.MAX_MARKS_PER_SUBJECT):
+                    raise ValueError(
+                        f"Marks for {subj} must be between 0 and {student.MAX_MARKS_PER_SUBJECT}. Got: {val}"
+                    )
+                validated[subj] = round(val, 2)
+
+        # Phase 2: Apply mutations and recalculate
+        for subj, score in validated.items():
+            student.marks[subj] = score
         student.recalculate()
         return True
 
@@ -116,10 +128,11 @@ class ResultManager:
             Sorted list of Student objects.
         """
         student_list = list(self.students.values())
-        if sort_by == "name":
-            return sorted(student_list, key=lambda s: s.name.lower())
-        elif sort_by in ("total", "percentage"):
-            return sorted(student_list, key=lambda s: s.total_marks, reverse=True)
+        criterion = str(sort_by).strip().lower()
+        if criterion == "name":
+            return sorted(student_list, key=lambda s: (s.name.lower(), s.student_id))
+        elif criterion in ("total", "percentage"):
+            return sorted(student_list, key=lambda s: (-s.total_marks, s.student_id))
         else:
             return sorted(student_list, key=lambda s: s.student_id)
 
@@ -189,7 +202,7 @@ class ResultManager:
         # Subject-wise average marks
         subject_averages = {}
         for subj in Student.SUBJECTS:
-            subj_total = sum(s.marks[subj] for s in students_list)
+            subj_total = sum(s.marks.get(subj, 0.0) for s in students_list)
             subject_averages[subj] = round(subj_total / total_students, 2)
 
         # Grade distribution breakdown
@@ -250,12 +263,13 @@ class ResultManager:
         except Exception as e:
             return False, f"Failed to save to CSV: {str(e)}"
 
-    def load_from_csv(self, filepath: Optional[str] = None) -> Tuple[bool, str]:
+    def load_from_csv(self, filepath: Optional[str] = None, clear_existing: bool = True) -> Tuple[bool, str]:
         """
         Load student records from CSV file into memory.
 
         Args:
             filepath: Source file path. Defaults to configured self.csv_filepath.
+            clear_existing: Whether to clear existing records before loading (default True).
 
         Returns:
             Tuple of (success: bool, message: str).
@@ -265,15 +279,23 @@ class ResultManager:
             return False, f"CSV file not found at '{target_path}' (will be created on save)."
 
         try:
+            loaded_students: Dict[str, Student] = {}
             loaded_count = 0
             with open(target_path, mode="r", newline="", encoding="utf-8") as file:
                 reader = csv.DictReader(file)
                 for row in reader:
-                    if not row.get("ID"):
+                    raw_id = row.get("ID")
+                    if not raw_id or not str(raw_id).strip():
                         continue
                     student = Student.from_dict(row)
-                    self.students[student.student_id] = student
+                    loaded_students[student.student_id] = student
                     loaded_count += 1
+
+            if clear_existing:
+                self.students = loaded_students
+            else:
+                self.students.update(loaded_students)
+
             return True, f"Successfully loaded {loaded_count} student record(s) from '{target_path}'."
         except Exception as e:
             return False, f"Failed to load from CSV: {str(e)}"

@@ -31,11 +31,21 @@ HEADER_HEIGHT = 38
 
 
 def get_font():
-    """Attempt to load a crisp monospace font, falling back to default."""
+    """Attempt to load a crisp monospace font cross-platform, falling back to default."""
     font_paths = [
+        # Windows
         "C:\\Windows\\Fonts\\consola.ttf",   # Consolas
         "C:\\Windows\\Fonts\\lucon.ttf",     # Lucida Console
         "C:\\Windows\\Fonts\\cour.ttf",      # Courier New
+        # macOS
+        "/System/Library/Fonts/Menlo.ttc",
+        "/System/Library/Fonts/Monaco.ttf",
+        "/Library/Fonts/Courier New.ttf",
+        "/System/Library/Fonts/Supplemental/Courier New.ttf",
+        # Linux
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeMono.ttf",
     ]
     for p in font_paths:
         if os.path.exists(p):

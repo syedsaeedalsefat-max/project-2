@@ -81,8 +81,9 @@ With your terminal inside the project directory, execute:
 
 ---
 
-### Method 2: One-Click Run (Windows Only)
-Double-click the **`run.bat`** file in the project folder to start the application directly.
+### Method 2: Script / One-Click Run
+- **Windows:** Double-click the **`run.bat`** file in the project folder to start the application directly.
+- **macOS / Linux:** Execute `./run.sh` in your terminal.
 
 ---
 

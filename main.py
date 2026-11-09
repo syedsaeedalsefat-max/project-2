@@ -68,6 +68,10 @@ def handle_add_student(manager: ResultManager) -> None:
     marks: Dict[str, float] = {}
     for subject in Student.SUBJECTS:
         score = prompt_float(f"  -> {subject}", min_val=0.0, max_val=100.0)
+        if score is None:
+            print_warning("Student enrollment cancelled.")
+            pause()
+            return
         marks[subject] = score
 
     try:
@@ -336,10 +340,13 @@ def main() -> None:
                 manager.save_to_csv()
                 print(f"\n{Colors.GREEN}{Colors.BOLD}Thank you for using the Coaching Center Result System! Goodbye.{Colors.RESET}\n")
                 sys.exit(0)
+            elif choice == "":
+                # User cancelled input prompt
+                continue
             else:
                 print_error("Invalid selection! Please enter a number between 0 and 9.")
                 pause()
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, EOFError):
             print(f"\n\n{Colors.YELLOW}Program interrupted by user. Exiting cleanly...{Colors.RESET}")
             manager.save_to_csv()
             sys.exit(0)

@@ -120,6 +120,40 @@ class TestStudentClass(unittest.TestCase):
         with self.assertRaises(ValueError):
             Student("ERR2", "Error Low", invalid_low)
 
+        # Non-numeric mark
+        invalid_type = dict(self.pass_marks)
+        invalid_type["Chemistry"] = "NOT_A_NUMBER"
+        with self.assertRaises(ValueError):
+            Student("ERR3", "Error String Mark", invalid_type)
+
+    def test_empty_id_or_name_raises_exception(self):
+        with self.assertRaises(ValueError):
+            Student("", "Valid Name", self.pass_marks)
+        with self.assertRaises(ValueError):
+            Student("   ", "Valid Name", self.pass_marks)
+        with self.assertRaises(ValueError):
+            Student("STU99", "", self.pass_marks)
+        with self.assertRaises(ValueError):
+            Student("STU99", "   ", self.pass_marks)
+
+    def test_from_dict_handles_empty_and_whitespace_marks(self):
+        raw_row = {
+            "ID": "STU88",
+            "Name": "Partial Data",
+            "Mathematics": "85.0",
+            "Physics": "",
+            "Chemistry": "   ",
+            "English": None,
+            "Computer Science": "90",
+        }
+        s = Student.from_dict(raw_row)
+        self.assertEqual(s.marks["Mathematics"], 85.0)
+        self.assertEqual(s.marks["Physics"], 0.0)
+        self.assertEqual(s.marks["Chemistry"], 0.0)
+        self.assertEqual(s.marks["English"], 0.0)
+        self.assertEqual(s.marks["Computer Science"], 90.0)
+        self.assertEqual(s.total_marks, 175.0)
+
     def test_serialization_dict(self):
         student = Student("STU99", "Serialization Test", self.pass_marks)
         d = student.to_dict()
@@ -256,6 +290,84 @@ class TestResultManagerClass(unittest.TestCase):
         self.assertEqual(loaded_s1.total_marks, 459.0)
         self.assertEqual(loaded_s1.grade, "A+")
         self.assertEqual(loaded_s1.status, "PASS")
+
+    def test_update_student_marks(self):
+        self.manager.add_student(self.s1)
+        self.assertEqual(self.s1.marks["Mathematics"], 95.0)
+
+        # Successful update
+        ok = self.manager.update_student_marks("S01", {"Mathematics": 100.0, "Physics": 95.0})
+        self.assertTrue(ok)
+        self.assertEqual(self.s1.marks["Mathematics"], 100.0)
+        self.assertEqual(self.s1.marks["Physics"], 95.0)
+        # Verify recalculate happened
+        self.assertEqual(self.s1.total_marks, 469.0)
+
+        # Update non-existent student
+        self.assertFalse(self.manager.update_student_marks("DOES_NOT_EXIST", {"Mathematics": 80.0}))
+
+    def test_update_student_marks_atomic_rollback(self):
+        self.manager.add_student(self.s1)
+        original_math = self.s1.marks["Mathematics"]
+        original_total = self.s1.total_marks
+
+        # Attempt updating with one valid and one invalid mark (> 100)
+        with self.assertRaises(ValueError):
+            self.manager.update_student_marks("S01", {"Mathematics": 50.0, "Physics": 999.0})
+
+        # Ensure atomic rollback: valid field must not have mutated
+        self.assertEqual(self.s1.marks["Mathematics"], original_math)
+        self.assertEqual(self.s1.total_marks, original_total)
+
+    def test_get_all_students_sorting(self):
+        self.manager.add_student(self.s1)  # Name: Student One, Total: 459
+        self.manager.add_student(self.s2)  # Name: Student Two, Total: 355
+        self.manager.add_student(self.s3)  # Name: Student Three, Total: 200
+
+        # Sort by total marks (descending)
+        by_total = self.manager.get_all_students(sort_by="total")
+        self.assertEqual([s.student_id for s in by_total], ["S01", "S02", "S03"])
+
+        # Sort by name
+        by_name = self.manager.get_all_students(sort_by="name")
+        self.assertEqual([s.student_id for s in by_name], ["S01", "S03", "S02"])
+
+        # Sort by ID
+        by_id = self.manager.get_all_students(sort_by="id")
+        self.assertEqual([s.student_id for s in by_id], ["S01", "S02", "S03"])
+
+    def test_load_from_csv_clears_stale_records(self):
+        # Manager starts with 3 students
+        self.manager.add_student(self.s1)
+        self.manager.add_student(self.s2)
+        self.manager.add_student(self.s3)
+        self.assertEqual(self.manager.count(), 3)
+
+        # Save only s1 to CSV
+        single_manager = ResultManager(csv_filepath=self.temp_csv)
+        single_manager.students = {"S01": self.s1}
+        single_manager.save_to_csv()
+
+        # Reloading in the original manager should clear deleted records (count becomes 1, not 3)
+        ok, msg = self.manager.load_from_csv(self.temp_csv)
+        self.assertTrue(ok)
+        self.assertEqual(self.manager.count(), 1)
+        self.assertIsNotNone(self.manager.search_student("S01"))
+        self.assertIsNone(self.manager.search_student("S02"))
+        self.assertIsNone(self.manager.search_student("S03"))
+
+    def test_empty_manager_summary_and_scorers(self):
+        empty_manager = ResultManager(csv_filepath=os.path.join(self.temp_dir.name, "empty.csv"))
+        empty_manager.students.clear()
+
+        self.assertEqual(empty_manager.get_highest_scoring_students(), [])
+        self.assertEqual(empty_manager.get_lowest_scoring_students(), [])
+
+        summary = empty_manager.generate_class_summary()
+        self.assertEqual(summary["total_students"], 0)
+        self.assertEqual(summary["class_average_total"], 0.0)
+        self.assertEqual(summary["highest_scorers"], [])
+        self.assertEqual(summary["lowest_scorers"], [])
 
 
 if __name__ == "__main__":
